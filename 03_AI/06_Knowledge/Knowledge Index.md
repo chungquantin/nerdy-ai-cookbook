@@ -12,4 +12,4 @@ status: active
 - [[01_MOCs/AI MOC]]
 
 ## Entries
-
+- [ ] [X Post by koylanai (2025286163641118915)](x-post-by-koylanai-2025286163641118915/README.md) - level: intermediate - source: https://x.com/koylanai/status/2025286163641118915

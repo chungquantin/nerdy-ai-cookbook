@@ -12,7 +12,6 @@ import argparse
 import datetime as dt
 import re
 import ssl
-import textwrap
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -176,6 +175,29 @@ def slugify(text: str) -> str:
     return slug[:72] or "untitled-source"
 
 
+def derive_title_from_url(parsed: urllib.parse.ParseResult) -> str:
+    host = parsed.netloc.lower()
+    parts = [p for p in parsed.path.split("/") if p]
+
+    if host in {"x.com", "twitter.com"} and len(parts) >= 3 and parts[1] == "status":
+        user = parts[0]
+        status_id = parts[2]
+        return f"X Post by {user} ({status_id})"
+
+    tail = Path(parsed.path).name.replace("-", " ").replace("_", " ").strip()
+    if tail:
+        return tail.title()
+    return parsed.netloc
+
+
+def has_x_js_block_page(parsed: urllib.parse.ParseResult, parser: "PageParser") -> bool:
+    host = parsed.netloc.lower()
+    if host not in {"x.com", "twitter.com"}:
+        return False
+    haystack = " ".join([parser.title, parser.description, *parser.paragraphs]).lower()
+    return "javascript is disabled" in haystack
+
+
 def fetch_page(url: str) -> str:
     req = urllib.request.Request(
         url,
@@ -237,24 +259,24 @@ def ensure_knowledge_index(group: str, cfg: GroupConfig) -> None:
         return
 
     title = f"{group.title()} Knowledge Index"
-    content = textwrap.dedent(
-        f"""\
-        ---
-        created: {TODAY}
-        updated: {TODAY}
-        tags: [{cfg.domain}, knowledge, index]
-        domain: {cfg.domain}
-        status: active
-        ---
-
-        # {title}
-
-        - [[{cfg.group_index.with_suffix('').as_posix()}]]
-        - [[{cfg.moc.with_suffix('').as_posix()}]]
-
-        ## Entries
-
-        """
+    content = "\n".join(
+        [
+            "---",
+            f"created: {TODAY}",
+            f"updated: {TODAY}",
+            f"tags: [{cfg.domain}, knowledge, index]",
+            f"domain: {cfg.domain}",
+            "status: active",
+            "---",
+            "",
+            f"# {title}",
+            "",
+            f"- [[{cfg.group_index.with_suffix('').as_posix()}]]",
+            f"- [[{cfg.moc.with_suffix('').as_posix()}]]",
+            "",
+            "## Entries",
+            "",
+        ]
     )
     index_path.write_text(content, encoding="utf-8")
 
@@ -283,55 +305,68 @@ def build_note_content(
     description: str,
     headings: List[str],
     paragraphs: List[str],
+    access_limited: bool,
 ) -> str:
-    summary = description or (paragraphs[0] if paragraphs else "")
-    summary = summary or "Add a short summary of the source."
+    if access_limited:
+        summary = (
+            "Content could not be fully fetched in this environment because the source requires "
+            "JavaScript/authenticated rendering. Add the post text manually."
+        )
+    else:
+        summary = description or (paragraphs[0] if paragraphs else "")
+        summary = summary or "Add a short summary of the source."
 
     bullets = headings[:5] if headings else []
     if not bullets and paragraphs:
         bullets = [paragraphs[0][:140], paragraphs[1][:140] if len(paragraphs) > 1 else ""]
         bullets = [b for b in bullets if b]
 
+    if access_limited:
+        bullets = [
+            "Page rendering is blocked in this environment (JavaScript/auth wall).",
+            "Paste the primary content and key claims manually.",
+        ]
+
     if not bullets:
         bullets = ["Extract key points from the source."]
 
-    bullets_md = "\n".join(f"- {item}" for item in bullets)
-
-    note = textwrap.dedent(
-        f"""\
-        ---
-        created: {TODAY}
-        updated: {TODAY}
-        tags: [{cfg.domain}, knowledge, {level}]
-        domain: {cfg.domain}
-        status: seed
-        source_url: "{url}"
-        ---
-
-        # {title}
-
-        ## Source
-        - URL: {url}
-        - Captured: {TODAY}
-
-        ## Summary
-        {summary}
-
-        ## Key Points
-        {bullets_md}
-
-        ## Connections
-        - [[{cfg.group_index.with_suffix('').as_posix()}]]
-        - [[{cfg.moc.with_suffix('').as_posix()}]]
-        - [[{cfg.knowledge_index.with_suffix('').as_posix()}]]
-
-        ## Notes
-        - Add your personal takeaways.
-        - Add comparisons with existing notes.
-
-        """
+    lines = [
+        "---",
+        f"created: {TODAY}",
+        f"updated: {TODAY}",
+        f"tags: [{cfg.domain}, knowledge, {level}]",
+        f"domain: {cfg.domain}",
+        "status: seed",
+        f"source_url: \"{url}\"",
+        "---",
+        "",
+        f"# {title}",
+        "",
+        "## Source",
+        f"- URL: {url}",
+        f"- Captured: {TODAY}",
+        "",
+        "## Summary",
+        summary,
+        "",
+        "## Key Points",
+    ]
+    lines.extend([f"- {item}" for item in bullets])
+    lines.extend(
+        [
+            "",
+            "## Connections",
+            f"- [[{cfg.group_index.with_suffix('').as_posix()}]]",
+            f"- [[{cfg.moc.with_suffix('').as_posix()}]]",
+            f"- [[{cfg.knowledge_index.with_suffix('').as_posix()}]]",
+            "",
+            "## Notes",
+            "- Add your personal takeaways.",
+            "- Add comparisons with existing notes.",
+            "",
+        ]
     )
-    return note
+    return "\n".join(lines)
 
 
 def parse_args() -> argparse.Namespace:
@@ -390,12 +425,12 @@ def main() -> int:
 
     title = clean_text(args.title) or parser.title
     if not title:
-        tail = Path(parsed.path).name.replace("-", " ").replace("_", " ").strip()
-        title = tail.title() if tail else parsed.netloc
+        title = derive_title_from_url(parsed)
 
     slug = slugify(title)
     note_dir = unique_note_dir(ROOT / cfg.knowledge_dir, slug)
     note_path = note_dir / "README.md"
+    access_limited = has_x_js_block_page(parsed, parser)
 
     note_content = build_note_content(
         cfg=cfg,
@@ -405,6 +440,7 @@ def main() -> int:
         description=parser.description,
         headings=parser.headings,
         paragraphs=parser.paragraphs,
+        access_limited=access_limited,
     )
 
     if args.dry_run:
