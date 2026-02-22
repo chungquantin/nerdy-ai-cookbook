@@ -13,4 +13,5 @@ Understand automated and human-in-the-loop methods to assess model quality.
 
 ## Connections
 - [[Agent Evaluation]]
+- [[03_AI/06_Knowledge/llm-evaluation-metrics/README]]
 

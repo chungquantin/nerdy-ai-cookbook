@@ -19,4 +19,5 @@ Enable agents to call tools safely and consistently.
 ## Connections
 - [[Prompt Engineering]]
 - [[Memory and Retrieval]]
+- [[02_Agents/06_Knowledge/tool-use-and-api-calling/README]]
 

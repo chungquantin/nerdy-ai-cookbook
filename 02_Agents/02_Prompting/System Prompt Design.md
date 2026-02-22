@@ -14,4 +14,5 @@ Define durable instruction layers, constraints, and output contracts for agent r
 ## Connections
 - [[Prompt Engineering]]
 - [[Tool Schemas and Function Calling]]
+- [[02_Agents/06_Knowledge/system-prompt-design/README]]
 

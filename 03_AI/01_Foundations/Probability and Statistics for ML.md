@@ -13,4 +13,5 @@ Statistical reasoning for model training, uncertainty, and evaluation.
 
 ## Connections
 - [[LLM Evaluation Metrics]]
+- [[03_AI/06_Knowledge/probability-and-statistics-for-ml/README]]
 

@@ -14,4 +14,5 @@ Measure task success, tool correctness, latency, and safety behavior.
 ## Connections
 - [[Planning and Reflection]]
 - [[LLM Evaluation Metrics]]
+- [[02_Agents/06_Knowledge/agent-evaluation/README]]
 

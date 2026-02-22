@@ -19,4 +19,5 @@ Break complex goals into steps and evaluate outcomes.
 ## Connections
 - [[Prompt Engineering]]
 - [[Memory and Retrieval]]
+- [[02_Agents/06_Knowledge/planning-and-reflection/README]]
 

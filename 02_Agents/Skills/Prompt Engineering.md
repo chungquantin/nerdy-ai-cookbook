@@ -19,4 +19,5 @@ Design prompts that produce reliable, targeted outputs.
 ## Connections
 - [[Tool Use and API Calling]]
 - [[Planning and Reflection]]
+- [[02_Agents/06_Knowledge/prompt-engineering/README]]
 

@@ -14,4 +14,5 @@ Retrieve external knowledge to improve factuality and task performance.
 ## Connections
 - [[Memory Taxonomy]]
 - [[Tool Schemas and Function Calling]]
+- [[03_AI/06_Knowledge/rag-basics/README]]
 

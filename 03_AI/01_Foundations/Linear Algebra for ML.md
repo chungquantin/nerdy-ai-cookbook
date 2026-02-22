@@ -13,4 +13,5 @@ Core vector and matrix concepts used throughout modern ML systems.
 
 ## Connections
 - [[Transformer Architecture]]
+- [[03_AI/06_Knowledge/linear-algebra-for-ml/README]]
 

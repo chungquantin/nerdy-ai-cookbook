@@ -14,4 +14,5 @@ Organize memory into working, episodic, semantic, and external retrieval layers.
 ## Connections
 - [[Memory and Retrieval]]
 - [[RAG Basics]]
+- [[02_Agents/06_Knowledge/memory-taxonomy/README]]
 

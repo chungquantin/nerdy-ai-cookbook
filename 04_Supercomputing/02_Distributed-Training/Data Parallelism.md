@@ -14,4 +14,5 @@ Replicate model shards across devices and synchronize gradients efficiently.
 ## Connections
 - [[Tensor and Pipeline Parallelism]]
 - [[GPU Cluster Architecture]]
+- [[04_Supercomputing/04_Knowledge/data-parallelism/README]]
 

@@ -14,4 +14,5 @@ Attention-based architecture behind modern LLMs.
 ## Connections
 - [[Linear Algebra for ML]]
 - [[SFT DPO RLHF]]
+- [[03_AI/06_Knowledge/transformer-architecture/README]]
 

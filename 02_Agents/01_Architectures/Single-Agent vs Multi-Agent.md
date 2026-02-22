@@ -14,4 +14,5 @@ Compare where a single agent is enough versus when multi-agent coordination is j
 ## Connections
 - [[Agents Index]]
 - [[Agent Evaluation]]
+- [[02_Agents/06_Knowledge/single-agent-vs-multi-agent/README]]
 

@@ -13,4 +13,5 @@ Systematic profiling to locate communication, memory, and compute bottlenecks.
 
 ## Connections
 - [[Tensor and Pipeline Parallelism]]
+- [[04_Supercomputing/04_Knowledge/profiling-and-bottlenecks/README]]
 

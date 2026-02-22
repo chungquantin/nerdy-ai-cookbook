@@ -19,4 +19,5 @@ Store and retrieve context across interactions and tasks.
 ## Connections
 - [[Tool Use and API Calling]]
 - [[Planning and Reflection]]
+- [[02_Agents/06_Knowledge/memory-and-retrieval/README]]
 

@@ -24,50 +24,50 @@ This vault is for continuously learning and organizing knowledge about:
 Start at [Agents Index](02_Agents/Agents%20Index.md)
 
 #### Beginner
-- [ ] [Single-Agent vs Multi-Agent](02_Agents/01_Architectures/Single-Agent%20vs%20Multi-Agent.md)
-- [ ] [System Prompt Design](02_Agents/02_Prompting/System%20Prompt%20Design.md)
-- [ ] [Prompt Engineering](02_Agents/Skills/Prompt%20Engineering.md)
+- [x] [Single-Agent vs Multi-Agent](02_Agents/01_Architectures/Single-Agent%20vs%20Multi-Agent.md)
+- [x] [System Prompt Design](02_Agents/02_Prompting/System%20Prompt%20Design.md)
+- [x] [Prompt Engineering](02_Agents/Skills/Prompt%20Engineering.md)
 
 #### Intermediate
-- [ ] [Tool Schemas and Function Calling](02_Agents/03_Tooling/Tool%20Schemas%20and%20Function%20Calling.md)
-- [ ] [Memory Taxonomy](02_Agents/04_Memory/Memory%20Taxonomy.md)
-- [ ] [Memory and Retrieval](02_Agents/Skills/Memory%20and%20Retrieval.md)
-- [ ] [Planning and Reflection](02_Agents/Skills/Planning%20and%20Reflection.md)
+- [x] [Tool Schemas and Function Calling](02_Agents/03_Tooling/Tool%20Schemas%20and%20Function%20Calling.md)
+- [x] [Memory Taxonomy](02_Agents/04_Memory/Memory%20Taxonomy.md)
+- [x] [Memory and Retrieval](02_Agents/Skills/Memory%20and%20Retrieval.md)
+- [x] [Planning and Reflection](02_Agents/Skills/Planning%20and%20Reflection.md)
 
 #### Advanced
-- [ ] [Agent Evaluation](02_Agents/05_Evaluation/Agent%20Evaluation.md)
-- [ ] [Tool Use and API Calling](02_Agents/Skills/Tool%20Use%20and%20API%20Calling.md)
-- [ ] [Link to Knowledge Skill](02_Agents/Skills/Link%20to%20Knowledge%20Skill.md)
+- [x] [Agent Evaluation](02_Agents/05_Evaluation/Agent%20Evaluation.md)
+- [x] [Tool Use and API Calling](02_Agents/Skills/Tool%20Use%20and%20API%20Calling.md)
+- [x] [Link to Knowledge Skill](02_Agents/Skills/Link%20to%20Knowledge%20Skill.md)
 
 ### AI / LLMs
 
 Start at [AI Index](03_AI/AI%20Index.md)
 
 #### Beginner
-- [ ] [Linear Algebra for ML](03_AI/01_Foundations/Linear%20Algebra%20for%20ML.md)
-- [ ] [Probability and Statistics for ML](03_AI/01_Foundations/Probability%20and%20Statistics%20for%20ML.md)
+- [x] [Linear Algebra for ML](03_AI/01_Foundations/Linear%20Algebra%20for%20ML.md)
+- [x] [Probability and Statistics for ML](03_AI/01_Foundations/Probability%20and%20Statistics%20for%20ML.md)
 
 #### Intermediate
-- [ ] [Transformer Architecture](03_AI/02_Modeling/Transformer%20Architecture.md)
-- [ ] [RAG Basics](03_AI/04_RAG/RAG%20Basics.md)
+- [x] [Transformer Architecture](03_AI/02_Modeling/Transformer%20Architecture.md)
+- [x] [RAG Basics](03_AI/04_RAG/RAG%20Basics.md)
 
 #### Advanced
-- [ ] [SFT DPO RLHF](03_AI/03_Post-Training/SFT%20DPO%20RLHF.md)
-- [ ] [LLM Evaluation Metrics](03_AI/05_Evaluation/LLM%20Evaluation%20Metrics.md)
+- [x] [SFT DPO RLHF](03_AI/03_Post-Training/SFT%20DPO%20RLHF.md)
+- [x] [LLM Evaluation Metrics](03_AI/05_Evaluation/LLM%20Evaluation%20Metrics.md)
 
 ### Supercomputing
 
 Start at [Supercomputing Index](04_Supercomputing/Supercomputing%20Index.md)
 
 #### Beginner
-- [ ] [GPU Cluster Architecture](04_Supercomputing/01_Infrastructure/GPU%20Cluster%20Architecture.md)
-- [ ] [Data Parallelism](04_Supercomputing/02_Distributed-Training/Data%20Parallelism.md)
+- [x] [GPU Cluster Architecture](04_Supercomputing/01_Infrastructure/GPU%20Cluster%20Architecture.md)
+- [x] [Data Parallelism](04_Supercomputing/02_Distributed-Training/Data%20Parallelism.md)
 
 #### Intermediate
-- [ ] [Tensor and Pipeline Parallelism](04_Supercomputing/02_Distributed-Training/Tensor%20and%20Pipeline%20Parallelism.md)
+- [x] [Tensor and Pipeline Parallelism](04_Supercomputing/02_Distributed-Training/Tensor%20and%20Pipeline%20Parallelism.md)
 
 #### Advanced
-- [ ] [Profiling and Bottlenecks](04_Supercomputing/03_Optimization/Profiling%20and%20Bottlenecks.md)
+- [x] [Profiling and Bottlenecks](04_Supercomputing/03_Optimization/Profiling%20and%20Bottlenecks.md)
 
 ## Link -> Knowledge Automation Skill
 
@@ -75,10 +75,11 @@ When you provide a URL, this skill will:
 - Fetch the page.
 - Infer the correct group (`agents`, `ai`, `supercomputing`, `projects`).
 - Infer progression level (`beginner`, `intermediate`, `advanced`).
-- Create or update a README-style knowledge note under that group.
+- Create or update a README-style knowledge note or topic dossier under that group.
 - Generate a deep research-style article note in prose (not bullet-only summaries).
 - Include the original source as a markdown link.
-- Upsert a checkbox entry in that group knowledge index.
+- Enforce `>=3` bibliography citations by default.
+- Upsert a checkbox entry in that group knowledge index, including citation count.
 
 ### Command
 
@@ -97,6 +98,21 @@ python scripts/add_knowledge_from_url.py "https://example.com/article" --level b
 
 # Override title
 python scripts/add_knowledge_from_url.py "https://example.com/article" --title "My Custom Title"
+
+# Topic dossier mode
+python scripts/add_knowledge_from_url.py "https://primary-source.example" \
+  --kind topic \
+  --topic-id transformer-architecture \
+  --group ai \
+  --level intermediate \
+  --extra-source "https://second-source.example" \
+  --extra-source "https://third-source.example"
+
+# Minimum citations (default: 3)
+python scripts/add_knowledge_from_url.py "https://example.com/article" --min-citations 4
+
+# Force overwrite of target note
+python scripts/add_knowledge_from_url.py "https://example.com/article" --overwrite
 
 # Preview only
 python scripts/add_knowledge_from_url.py "https://example.com/article" --dry-run
