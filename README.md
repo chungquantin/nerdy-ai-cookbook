@@ -75,8 +75,10 @@ When you provide a URL, this skill will:
 - Fetch the page.
 - Infer the correct group (`agents`, `ai`, `supercomputing`, `projects`).
 - Infer progression level (`beginner`, `intermediate`, `advanced`).
-- Create a README-style knowledge note under that group.
-- Add a checkbox entry to that group knowledge index.
+- Create or update a README-style knowledge note under that group.
+- Generate a deep research-style article note in prose (not bullet-only summaries).
+- Include the original source as a markdown link.
+- Upsert a checkbox entry in that group knowledge index.
 
 ### Command
 

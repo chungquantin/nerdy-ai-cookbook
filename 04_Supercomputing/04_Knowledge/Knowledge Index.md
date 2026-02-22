@@ -12,4 +12,4 @@ status: active
 - [[01_MOCs/Supercomputing MOC]]
 
 ## Entries
-
+- [ ] [Supercomputing for AI](supercomputing-for-ai/README.md) - level: intermediate - source: https://torres.ai/supercomputing-for-ai/

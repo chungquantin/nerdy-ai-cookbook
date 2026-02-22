@@ -18,10 +18,11 @@ Given a URL, automatically create a README-style knowledge note and file it into
 - Fetch and parse page title/description/headings.
 - Auto-classify group: `agents`, `ai`, `supercomputing`, or `projects`.
 - Auto-tag level: `beginner`, `intermediate`, or `advanced`.
-- Create `<group>/.../Knowledge/<slug>/README.md`.
-- Append checklist entry to that group's `Knowledge Index.md`.
+- Create or update `<group>/.../Knowledge/<slug>/README.md` (same URL updates existing note).
+- Generate a deep research-style README in prose sections (`Abstract`, `Context`, `Technical Approach`, `Main Findings`, `Critical Analysis`, `Application`).
+- Always include an explicit original-source markdown link in `## Source`.
+- Upsert checklist entry in that group's `Knowledge Index.md`.
 
 ## Connections
 - [[Agents Index]]
 - [[Skills Index]]
-

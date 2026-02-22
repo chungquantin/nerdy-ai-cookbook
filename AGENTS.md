@@ -57,5 +57,7 @@ When a user provides a source URL, use:
 
 Expected behavior:
 1. Auto-classify into `agents`, `ai`, `supercomputing`, or `projects`.
-2. Create a README-style note under that group's knowledge folder.
-3. Append a checklist entry into that group's `Knowledge Index.md`.
+2. Create/update a README-style note under that group's knowledge folder.
+3. Write the resource README as a deep research-style article in prose paragraphs (not bullet-only summaries).
+4. Include the original source as a markdown link in the note.
+5. Upsert a checklist entry into that group's `Knowledge Index.md`.

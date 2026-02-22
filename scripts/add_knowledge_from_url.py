@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import argparse
 import datetime as dt
+import json
 import re
 import ssl
 import urllib.error
@@ -19,10 +20,26 @@ from dataclasses import dataclass
 from html import unescape
 from html.parser import HTMLParser
 from pathlib import Path
-from typing import Dict, List, Tuple
+from typing import Dict, List, Optional, Tuple
 
 ROOT = Path(__file__).resolve().parents[1]
 TODAY = dt.date.today().isoformat()
+ENTRY_RE = re.compile(
+    r"^- \[ \] \[(?P<title>.+?)\]\((?P<path>.+?)\) - level: (?P<level>[a-z]+) - source: (?P<source>.+)$"
+)
+NOISE_PATTERNS = [
+    "javascript is disabled",
+    "supported browsers",
+    "start typing and press enter to search",
+    "sign in",
+    "log in",
+    "cookie",
+    "privacy policy",
+    "subscribe to receive notifications",
+    "newsletter",
+    "the cloudflare blog",
+]
+HTML_TAG_RE = re.compile(r"<[^>]+>")
 
 
 @dataclass(frozen=True)
@@ -126,6 +143,7 @@ class PageParser(HTMLParser):
         self.description = ""
         self.headings: List[str] = []
         self.paragraphs: List[str] = []
+        self.list_items: List[str] = []
 
     def handle_starttag(self, tag: str, attrs: List[Tuple[str, str | None]]) -> None:
         attrs_dict = {k.lower(): (v or "") for k, v in attrs}
@@ -133,7 +151,7 @@ class PageParser(HTMLParser):
             key = (attrs_dict.get("name") or attrs_dict.get("property") or "").lower()
             if key in {"description", "og:description", "twitter:description"} and not self.description:
                 self.description = clean_text(attrs_dict.get("content", ""))
-        if tag in {"title", "h1", "h2", "h3", "p"}:
+        if tag in {"title", "h1", "h2", "h3", "p", "li"}:
             self._capture_tag = tag
             self._buffer = []
 
@@ -152,10 +170,12 @@ class PageParser(HTMLParser):
 
         if tag == "title" and not self.title:
             self.title = text
-        elif tag in {"h1", "h2", "h3"} and len(self.headings) < 8:
+        elif tag in {"h1", "h2", "h3"} and len(self.headings) < 20:
             self.headings.append(text)
-        elif tag == "p" and len(self.paragraphs) < 6:
+        elif tag == "p" and len(self.paragraphs) < 60:
             self.paragraphs.append(text)
+        elif tag == "li" and len(self.list_items) < 80:
+            self.list_items.append(text)
 
         self._capture_tag = None
         self._buffer = []
@@ -196,6 +216,94 @@ def has_x_js_block_page(parsed: urllib.parse.ParseResult, parser: "PageParser") 
         return False
     haystack = " ".join([parser.title, parser.description, *parser.paragraphs]).lower()
     return "javascript is disabled" in haystack
+
+
+def fetch_x_oembed(url: str) -> Optional[Dict[str, str]]:
+    endpoint = "https://publish.twitter.com/oembed?url=" + urllib.parse.quote(url, safe="")
+    try:
+        req = urllib.request.Request(endpoint, headers={"User-Agent": "Mozilla/5.0 (knowledge-ingestor)"})
+        raw = urllib.request.urlopen(req, timeout=30).read().decode("utf-8", errors="replace")
+        data = json.loads(raw)
+    except Exception:
+        return None
+
+    html = clean_text(data.get("html", ""))
+    text = clean_text(HTML_TAG_RE.sub(" ", html))
+    return {
+        "author_name": clean_text(data.get("author_name", "")),
+        "author_url": clean_text(data.get("author_url", "")),
+        "provider_name": clean_text(data.get("provider_name", "")),
+        "embed_text": text,
+    }
+
+
+def is_noise(text: str) -> bool:
+    lower = text.lower()
+    return any(pattern in lower for pattern in NOISE_PATTERNS)
+
+
+def split_sentences(text: str) -> List[str]:
+    parts = re.split(r"(?<=[.!?])\s+", text.strip())
+    return [clean_text(p) for p in parts if clean_text(p)]
+
+
+def extract_content_sentences(description: str, paragraphs: List[str], list_items: List[str]) -> List[str]:
+    sentences: List[str] = []
+    for block in [description, *paragraphs, *list_items]:
+        if not block or is_noise(block):
+            continue
+        for sentence in split_sentences(block):
+            if len(sentence) < 35 or len(sentence) > 340:
+                continue
+            if is_noise(sentence):
+                continue
+            if sentence.endswith(":"):
+                continue
+            sentences.append(sentence)
+
+    deduped: List[str] = []
+    seen = set()
+    for sentence in sentences:
+        key = sentence.lower()
+        if key in seen:
+            continue
+        seen.add(key)
+        deduped.append(sentence)
+    return deduped
+
+
+def choose_summary(description: str, sentences: List[str], access_limited: bool) -> str:
+    if access_limited:
+        return (
+            "Content could not be fully fetched in this environment because the source requires "
+            "JavaScript/authenticated rendering. Add the post text manually."
+        )
+    if description and not is_noise(description):
+        if len(description) < 90 and sentences:
+            extra = next((s for s in sentences if s.lower() != description.lower()), "")
+            if extra:
+                return f"{description} {extra}"
+        return description
+    if sentences:
+        return sentences[0]
+    return "Add a short summary of the source."
+
+
+def pick_distinct_sentences(sentences: List[str], count: int) -> List[str]:
+    picked: List[str] = []
+    seen_tokens: set[str] = set()
+    for sentence in sentences:
+        tokens = set(re.findall(r"[a-z]{4,}", sentence.lower()))
+        if not tokens:
+            continue
+        overlap = len(tokens & seen_tokens) / max(len(tokens), 1)
+        if overlap > 0.65:
+            continue
+        picked.append(sentence)
+        seen_tokens |= tokens
+        if len(picked) >= count:
+            break
+    return picked
 
 
 def fetch_page(url: str) -> str:
@@ -281,19 +389,52 @@ def ensure_knowledge_index(group: str, cfg: GroupConfig) -> None:
     index_path.write_text(content, encoding="utf-8")
 
 
-def append_to_knowledge_index(cfg: GroupConfig, title: str, note_dir: Path, level: str, source_url: str) -> None:
+def find_existing_entry_by_source(source_url: str) -> Optional[Tuple[str, GroupConfig, Path, str, str]]:
+    for group, cfg in GROUPS.items():
+        index_path = ROOT / cfg.knowledge_index
+        if not index_path.exists():
+            continue
+        lines = index_path.read_text(encoding="utf-8").splitlines()
+        for line in lines:
+            match = ENTRY_RE.match(line.strip())
+            if not match:
+                continue
+            if match.group("source").strip() != source_url:
+                continue
+            rel_path = Path(match.group("path"))
+            note_path = (index_path.parent / rel_path).resolve()
+            return (
+                group,
+                cfg,
+                note_path,
+                match.group("title"),
+                match.group("level"),
+            )
+    return None
+
+
+def upsert_knowledge_index_entry(cfg: GroupConfig, title: str, note_dir: Path, level: str, source_url: str) -> None:
     index_path = ROOT / cfg.knowledge_index
     rel = note_dir.relative_to(index_path.parent)
     line = f"- [ ] [{title}]({rel.as_posix()}/README.md) - level: {level} - source: {source_url}\n"
 
-    existing = index_path.read_text(encoding="utf-8")
-    if source_url in existing:
-        return
+    lines = index_path.read_text(encoding="utf-8").splitlines()
+    replaced = False
+    new_lines: List[str] = []
+    for current in lines:
+        match = ENTRY_RE.match(current.strip())
+        if match and match.group("source").strip() == source_url:
+            new_lines.append(line.strip())
+            replaced = True
+        else:
+            new_lines.append(current)
 
-    if "## Entries" not in existing:
-        existing = existing.rstrip() + "\n\n## Entries\n\n"
+    updated = "\n".join(new_lines).rstrip()
+    if not replaced:
+        if "## Entries" not in updated:
+            updated = updated + "\n\n## Entries\n"
+        updated = updated + "\n" + line.strip()
 
-    updated = existing.rstrip() + "\n" + line
     index_path.write_text(updated + "\n", encoding="utf-8")
 
 
@@ -305,30 +446,84 @@ def build_note_content(
     description: str,
     headings: List[str],
     paragraphs: List[str],
+    list_items: List[str],
     access_limited: bool,
+    oembed_info: Optional[Dict[str, str]] = None,
 ) -> str:
+    content_sentences = extract_content_sentences(description, paragraphs, list_items)
+    selected = pick_distinct_sentences(content_sentences, 16)
+    summary = choose_summary(description, content_sentences, access_limited)
+    clean_headings = [h for h in headings if not is_noise(h)]
+    heading_overview = ", ".join(clean_headings[:4]) if clean_headings else "core concepts and implementation details"
+    level_article = "an" if level[:1].lower() in {"a", "e", "i", "o", "u"} else "a"
+
+    def synth(start: int, take: int, fallback: str) -> str:
+        chunk = selected[start : start + take]
+        if chunk:
+            return " ".join(chunk)
+        return fallback
+
     if access_limited:
-        summary = (
-            "Content could not be fully fetched in this environment because the source requires "
-            "JavaScript/authenticated rendering. Add the post text manually."
+        author = (oembed_info or {}).get("author_name", "")
+        author_url = (oembed_info or {}).get("author_url", "")
+        embed_text = (oembed_info or {}).get("embed_text", "")
+        provider = (oembed_info or {}).get("provider_name", "")
+        author_fragment = f" by {author}" if author else ""
+        author_link_fragment = f" ({author_url})" if author_url else ""
+
+        abstract = (
+            "This resource is archived as a reference node, but full content extraction failed because the source "
+            "requires JavaScript or authenticated rendering in this environment."
+        )
+        context = (
+            f"Even with blocked rendering, metadata from {provider or 'the platform'} indicates this is a social post{author_fragment}{author_link_fragment}. "
+            "Preserving this entry keeps the knowledge graph complete and makes later manual enrichment straightforward."
+        )
+        method = (
+            "The ingestion process captured canonical source metadata and linked this note to its topic hubs. "
+            "When available, oEmbed metadata was used as secondary evidence for authorship and post context."
+        )
+        findings = (
+            f"Available fallback metadata: {embed_text}" if embed_text else
+            "No trustworthy detailed claims were extracted automatically from the page payload. Any substantive summary, "
+            "technical claims, or caveats should be added by reading the source directly."
+        )
+        critique = (
+            "Dynamic platform rendering and auth walls limit reproducible extraction. "
+            "For high-value social references, manually copy the post body and linked resource context into this note."
         )
     else:
-        summary = description or (paragraphs[0] if paragraphs else "")
-        summary = summary or "Add a short summary of the source."
+        abstract = (
+            f"{summary} This note frames the source as {level_article} {level}-level reference in the `{cfg.domain}` track and "
+            "captures its technical contribution in research-article form for later retrieval and synthesis."
+        )
+        context = (
+            f"The source positions its discussion around {heading_overview}. "
+            f"{synth(1, 2, 'It emphasizes practical trade-offs that appear during real-world deployment rather than toy examples.')}"
+        )
+        method = (
+            "The material uses a systems-oriented explanatory approach: it introduces a constraint, maps design "
+            "choices to execution behavior, and then demonstrates how those choices affect operational outcomes. "
+            f"{synth(3, 3, 'Its structure suggests a progression from conceptual framing to implementation-level guidance.')}"
+        )
+        findings = (
+            f"{synth(0, 3, 'The source highlights concrete technical claims worth validating in follow-up experiments.')} "
+            f"{synth(6, 2, 'A recurring theme is the tension between capability, efficiency, and reliability under constraints.')}"
+        )
+        critique = (
+            f"{synth(8, 2, 'A key caveat is that headline claims may depend on assumptions not fully visible without deeper benchmarking context.')} "
+            "Treat this summary as a research waypoint; validate claims against additional sources, benchmarks, or implementation experiments before operational adoption."
+        )
 
-    bullets = headings[:5] if headings else []
-    if not bullets and paragraphs:
-        bullets = [paragraphs[0][:140], paragraphs[1][:140] if len(paragraphs) > 1 else ""]
-        bullets = [b for b in bullets if b]
-
-    if access_limited:
-        bullets = [
-            "Page rendering is blocked in this environment (JavaScript/auth wall).",
-            "Paste the primary content and key claims manually.",
-        ]
-
-    if not bullets:
-        bullets = ["Extract key points from the source."]
+    application = (
+        f"In this vault, the resource should be studied alongside [[{cfg.group_index.with_suffix('').as_posix()}]], "
+        f"[[{cfg.moc.with_suffix('').as_posix()}]], and [[{cfg.knowledge_index.with_suffix('').as_posix()}]]. "
+        "Add implementation notes, disagreements, and follow-up experiments to convert this archive entry into actionable knowledge."
+    )
+    graph_connections = (
+        f"Related graph nodes: [[{cfg.group_index.with_suffix('').as_posix()}]], "
+        f"[[{cfg.moc.with_suffix('').as_posix()}]], and [[{cfg.knowledge_index.with_suffix('').as_posix()}]]."
+    )
 
     lines = [
         "---",
@@ -343,29 +538,34 @@ def build_note_content(
         f"# {title}",
         "",
         "## Source",
-        f"- URL: {url}",
-        f"- Captured: {TODAY}",
+        f"Original URL: [{url}]({url})",
         "",
-        "## Summary",
-        summary,
+        f"Captured on {TODAY}.",
         "",
-        "## Key Points",
+        "## Abstract",
+        abstract,
+        "",
+        "## Context and Problem Framing",
+        context,
+        "",
+        "## Technical Approach",
+        method,
+        "",
+        "## Main Findings",
+        findings,
+        "",
+        "## Critical Analysis",
+        critique,
+        "",
+        "## Application to This Cookbook",
+        application,
+        "",
+        "## Graph Connections",
+        graph_connections,
+        "",
+        "## Research Notes",
+        "Use this space for your own deeper synthesis, replication notes, contradictions with other sources, and concrete follow-up experiments.",
     ]
-    lines.extend([f"- {item}" for item in bullets])
-    lines.extend(
-        [
-            "",
-            "## Connections",
-            f"- [[{cfg.group_index.with_suffix('').as_posix()}]]",
-            f"- [[{cfg.moc.with_suffix('').as_posix()}]]",
-            f"- [[{cfg.knowledge_index.with_suffix('').as_posix()}]]",
-            "",
-            "## Notes",
-            "- Add your personal takeaways.",
-            "- Add comparisons with existing notes.",
-            "",
-        ]
-    )
     return "\n".join(lines)
 
 
@@ -419,18 +619,45 @@ def main() -> int:
         ]
     )
 
-    group = args.group if args.group != "auto" else classify_group(combined_text)
-    level = args.level if args.level != "auto" else classify_level(combined_text)
+    existing_entry = find_existing_entry_by_source(args.url)
+
+    inferred_group = classify_group(combined_text)
+    inferred_level = classify_level(combined_text)
+
+    if args.group != "auto":
+        group = args.group
+    elif existing_entry:
+        group = existing_entry[0]
+    else:
+        group = inferred_group
+
+    if args.level != "auto":
+        level = args.level
+    elif existing_entry:
+        level = existing_entry[4]
+    else:
+        level = inferred_level
+
     cfg = GROUPS[group]
 
     title = clean_text(args.title) or parser.title
+    if title and is_noise(title):
+        title = ""
+    if not title and existing_entry:
+        title = existing_entry[3]
     if not title:
         title = derive_title_from_url(parsed)
 
-    slug = slugify(title)
-    note_dir = unique_note_dir(ROOT / cfg.knowledge_dir, slug)
-    note_path = note_dir / "README.md"
+    if existing_entry and existing_entry[1] == cfg:
+        note_path = existing_entry[2]
+        note_dir = note_path.parent
+    else:
+        slug = slugify(title)
+        note_dir = unique_note_dir(ROOT / cfg.knowledge_dir, slug)
+        note_path = note_dir / "README.md"
+
     access_limited = has_x_js_block_page(parsed, parser)
+    oembed_info = fetch_x_oembed(args.url) if access_limited else None
 
     note_content = build_note_content(
         cfg=cfg,
@@ -440,22 +667,29 @@ def main() -> int:
         description=parser.description,
         headings=parser.headings,
         paragraphs=parser.paragraphs,
+        list_items=parser.list_items,
         access_limited=access_limited,
+        oembed_info=oembed_info,
     )
 
     if args.dry_run:
         print(f"group={group}")
         print(f"level={level}")
         print(f"target={note_path.relative_to(ROOT)}")
+        if existing_entry:
+            print("mode=update-existing")
+        else:
+            print("mode=create-new")
         return 0
 
     note_dir.mkdir(parents=True, exist_ok=True)
     note_path.write_text(note_content, encoding="utf-8")
 
     ensure_knowledge_index(group, cfg)
-    append_to_knowledge_index(cfg, title, note_dir, level, args.url)
+    upsert_knowledge_index_entry(cfg, title, note_dir, level, args.url)
 
-    print(f"Created: {note_path.relative_to(ROOT)}")
+    action = "Updated" if existing_entry and existing_entry[1] == cfg else "Created"
+    print(f"{action}: {note_path.relative_to(ROOT)}")
     print(f"Updated: {cfg.knowledge_index.as_posix()}")
     print(f"Group: {group} | Level: {level}")
     return 0
